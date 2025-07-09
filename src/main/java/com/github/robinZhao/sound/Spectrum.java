@@ -278,8 +278,26 @@ public class Spectrum {
                 : String.valueOf(Math.round(freq)) + " Hz";
     }
 
-    public List<double[]>[] getFreqData() {
+    public List<double[]>[] getFrequenciesData() {
         return this.frequenciesData;
+    }
+
+    
+    public double idxToHz(int idx, int length) {
+        return this.scale
+                .scaleToHz((double) (idx + 1) / length * (this.scale.hzToScale(this.format.getSampleRate() / 2)));
+    }
+
+    /**
+     * hz转换为数组，分辨率问题，可能会存在1hz的误差,计算时上加+1hz来算范围
+     * 
+     * @param hz
+     * @param length
+     * @return
+     */
+    public int hzToIdx(double hz, int length) {
+        return (int) ((double) length
+                * (this.scale.hzToScale(hz) / this.scale.hzToScale(this.format.getSampleRate() / 2)));
     }
 
 }
