@@ -42,7 +42,7 @@ public class Spectrum {
                 new WavesurferTransformer(bufferSize, "hann"));
         spc.run();
         System.out.println(System.currentTimeMillis() - startTime);
-        spc.drawSpctrogram(0,spc.getAudioFormat().getSampleRate()/2,1024, 800, -1);
+        spc.drawSpctrogram(0,spc.getAudioFormat().getSampleRate()/2,1024, 800, 40,20,-1);
     }
 
     public Spectrum(File audioFile, int bufferSize, ScaleFilter.Type scaleType, SpectrumTransformer transformer) {
@@ -170,29 +170,41 @@ public class Spectrum {
         this.frequenciesData[channelIdx].add(array);
     }
 
-    private void drawLabels(Graphics g,double frequencyMin,double frequencyMax,int y, int height) {
-        int maxY = height > 0 ? height : 512;
-        double stepCount = 5 * (maxY / 256d);
+    private void drawFreqMark(Graphics g,double frequencyMin,double frequencyMax,int y, int height) {
+        //int maxY = height > 0 ? height : 512;
+        double stepHeight = 256d/5;
+        double stepCount = height / stepHeight;
         double scaleMin = this.scale.hzToScale(frequencyMin);
         double scaleMax = this.scale.hzToScale(frequencyMax);
 
 
         for (int i = 0; i <= stepCount; i++) {
             double hz =  this.scale.scaleToHz(scaleMin + (i / stepCount) * (scaleMax - scaleMin));
-            g.setColor(colorMap.getColor(255));
-            int lableY = y + height - (int) (i * height / stepCount);
+            int lableY = y + height - (int)(i*stepHeight);
             if (lableY <= y) {
                 lableY = y + 10;
             }
             if (lableY >= y + height) {
                 lableY = y + height;
             }
+            g.setColor(colorMap.getColor(255));
             g.setFont(new Font("Arial", Font.BOLD, 12));
             g.drawString(this.labelText(hz), 0, lableY);
         }
     }
 
-    /**
+    private void drawTimeMark(Graphics g,double duration,int picWidth,int y,int markWidth) {
+        int durationWidth = picWidth-markWidth;
+        double stepCount = duration;
+        for(int i=0;i<=stepCount;i++){
+            //double second = i/stepCount*duration;
+            g.setColor(colorMap.getColor(255));
+            g.setFont(new Font("Arial", Font.BOLD, 12));
+            g.drawString(String.format("%ds", i), markWidth+(int)(i*durationWidth/stepCount), y);
+        }
+    }
+
+     /**
      * @param frequencyMin  图像中最小频率
      * @param frequencyMin  图像中最大频率
      * @param width      图片宽度
@@ -200,6 +212,19 @@ public class Spectrum {
      * @param channelIdx 绘制的声道,小于0代表全部声道，大于等于0代表指定声道
      */
     public void drawSpctrogram(double frequencyMin,double frequencyMax,int width, int height, int channelIdx) {
+        this.drawSpctrogram(frequencyMin, frequencyMax, width, height, 0,-1, channelIdx);
+    }
+
+    /**
+     * @param frequencyMin  图像中最小频率
+     * @param frequencyMin  图像中最大频率
+     * @param width      图片宽度
+     * @param height     图片高度
+     * @param markLeftWidth  左侧刻度占用的宽度
+     * @param markBottomHeight  底部刻度占用的高度
+     * @param channelIdx 绘制的声道,小于0代表全部声道，大于等于0代表指定声道
+     */
+    public void drawSpctrogram(double frequencyMin,double frequencyMax,int picWidth, int picHeight, int markLeftWidth,int markBottomHeight,int channelIdx) {
         if (null == this.frequenciesData || this.frequenciesData.length == 0) {
             throw new RuntimeException("频谱图绘制错误，无数据");
         }
@@ -208,12 +233,14 @@ public class Spectrum {
         }
         // Maximum frequency represented in `frequenciesData`
         int freqFrom = (int) this.format.getSampleRate() / 2;
+        int width=markLeftWidth>0?picWidth-markLeftWidth:picWidth;
+        int height = markBottomHeight>0?picHeight-markBottomHeight:picHeight;
         int innerHeight = height / frequenciesData.length;
         if (channelIdx >= 0) {
             innerHeight = height;
         }
         // Minimum and maximum frequency we want to draw
-        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_BGR);
+        BufferedImage image = new BufferedImage(picWidth, picHeight, BufferedImage.TYPE_INT_BGR);
         Graphics spectrCc = image.getGraphics();
 
         if (frequencyMax > freqFrom) {
@@ -247,17 +274,18 @@ public class Spectrum {
 
             // Only relevant if `freqMax > freqFrom`
             double rMax1 = Math.min(1, rMax);
-            int dx0 = 0;
+            int dx0 = picWidth-width;
             int dy0 = (int) (innerHeight * (c + 1 - rMax1 / rMax));
-            int dx1 = width;
+            int dx1 = dx0+width;
             int dy1 = (c + 1) * (int) (innerHeight);
 
             spectrCc.drawImage(cImage, dx0, dy0, dx1, dy1,
                     0, (int) Math.round(bitmapHeight * (1 - rMax1)), width,
                     (int) Math.round(bitmapHeight * (rMax1 - rMin)), null);
 
-            drawLabels(spectrCc, frequencyMin,frequencyMax,innerHeight * c, innerHeight);
+            if(markLeftWidth>=0)drawFreqMark(spectrCc, frequencyMin,frequencyMax,innerHeight * c, innerHeight);
         }
+        if(markBottomHeight>=0)drawTimeMark(spectrCc,this.audioInputStream.getFrameLength()/this.format.getSampleRate(),picWidth,picHeight-markBottomHeight/2,markLeftWidth>=0?markLeftWidth:0);
         try {
             ImageIO.write(image, "png", new File("test.png"));
         } catch (IOException e) {
