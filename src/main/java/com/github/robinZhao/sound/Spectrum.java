@@ -30,8 +30,6 @@ public class Spectrum {
     private int gainDB = 20;
     private int rangeDB = 80;
     private List<double[]>[] frequenciesData;
-    private int frequencyMin = 2000;
-    private int frequencyMax = 8000;
     private ColorMap colorMap = new ColorMap(ColorMap.Type.roseus);
     ScaleFilter scale;
     SpectrumTransformer spectrumTransformer;
@@ -39,12 +37,12 @@ public class Spectrum {
     public static void main(String[] args) {
         long startTime = System.currentTimeMillis();
         int bufferSize = 1024;
-        Spectrum spc = new Spectrum(new File("F:/sound/test.wav"), bufferSize,
+        Spectrum spc = new Spectrum(new File("test.wav"), bufferSize,
                 ScaleFilter.Type.mel,
                 new WavesurferTransformer(bufferSize, "hann"));
         spc.run();
         System.out.println(System.currentTimeMillis() - startTime);
-        spc.drawSpctrogram(1024, 800, -1);
+        spc.drawSpctrogram(0,spc.getAudioFormat().getSampleRate()/2,1024, 800, -1);
     }
 
     public Spectrum(File audioFile, int bufferSize, ScaleFilter.Type scaleType, SpectrumTransformer transformer) {
@@ -172,21 +170,17 @@ public class Spectrum {
         this.frequenciesData[channelIdx].add(array);
     }
 
-    private void drawLabels(Graphics g, int y, int height) {
+    private void drawLabels(Graphics g,double frequencyMin,double frequencyMax,int y, int height) {
         int maxY = height > 0 ? height : 512;
         double stepCount = 5 * (maxY / 256d);
-        double scaleMin = this.scale.hzToScale(this.frequencyMin);
-        double scaleMax = this.scale.hzToScale(this.frequencyMax);
+        double scaleMin = this.scale.hzToScale(frequencyMin);
+        double scaleMax = this.scale.hzToScale(frequencyMax);
 
 
-        for (int i = 0; i < stepCount + 1; i++) {
+        for (int i = 0; i <= stepCount; i++) {
             double hz =  this.scale.scaleToHz(scaleMin + (i / stepCount) * (scaleMax - scaleMin));
             g.setColor(colorMap.getColor(255));
             int lableY = y + height - (int) (i * height / stepCount);
-            if (i > stepCount) {
-                lableY = y;
-                hz =  this.frequencyMax;
-            }
             if (lableY <= y) {
                 lableY = y + 10;
             }
@@ -199,12 +193,13 @@ public class Spectrum {
     }
 
     /**
-     * 
+     * @param frequencyMin  图像中最小频率
+     * @param frequencyMin  图像中最大频率
      * @param width      图片宽度
      * @param height     图片高度
      * @param channelIdx 绘制的声道,小于0代表全部声道，大于等于0代表指定声道
      */
-    public void drawSpctrogram(int width, int height, int channelIdx) {
+    public void drawSpctrogram(double frequencyMin,double frequencyMax,int width, int height, int channelIdx) {
         if (null == this.frequenciesData || this.frequenciesData.length == 0) {
             throw new RuntimeException("频谱图绘制错误，无数据");
         }
@@ -218,12 +213,10 @@ public class Spectrum {
             innerHeight = height;
         }
         // Minimum and maximum frequency we want to draw
-        int freqMin = this.frequencyMin;
-        int freqMax = this.frequencyMax;
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_BGR);
         Graphics spectrCc = image.getGraphics();
 
-        if (freqMax > freqFrom) {
+        if (frequencyMax > freqFrom) {
             // Draw background since spectrogram will not fill the entire canvas
             Color bgColor = this.colorMap.getColor(0);
             spectrCc.setColor(bgColor);
@@ -249,8 +242,8 @@ public class Spectrum {
             }
 
             // The relative positions of `freqMin` and `freqMax` in `imageData`
-            double rMin = this.scale.hzToScale(freqMin) / this.scale.hzToScale(freqFrom);
-            double rMax = this.scale.hzToScale(freqMax) / this.scale.hzToScale(freqFrom);
+            double rMin = this.scale.hzToScale(frequencyMin) / this.scale.hzToScale(freqFrom);
+            double rMax = this.scale.hzToScale(frequencyMax) / this.scale.hzToScale(freqFrom);
 
             // Only relevant if `freqMax > freqFrom`
             double rMax1 = Math.min(1, rMax);
@@ -263,7 +256,7 @@ public class Spectrum {
                     0, (int) Math.round(bitmapHeight * (1 - rMax1)), width,
                     (int) Math.round(bitmapHeight * (rMax1 - rMin)), null);
 
-            drawLabels(spectrCc, innerHeight * c, innerHeight);
+            drawLabels(spectrCc, frequencyMin,frequencyMax,innerHeight * c, innerHeight);
         }
         try {
             ImageIO.write(image, "png", new File("test.png"));
@@ -285,7 +278,7 @@ public class Spectrum {
     
     public double idxToHz(int idx, int length) {
         return this.scale
-                .scaleToHz((double) (idx + 1) / length * (this.scale.hzToScale(this.format.getSampleRate() / 2)));
+                .scaleToHz((double) (idx) / length * (this.scale.hzToScale(this.format.getSampleRate() / 2)));
     }
 
     /**
@@ -296,8 +289,12 @@ public class Spectrum {
      * @return
      */
     public int hzToIdx(double hz, int length) {
-        return (int) ((double) length
+        return (int) Math.round((double) length
                 * (this.scale.hzToScale(hz) / this.scale.hzToScale(this.format.getSampleRate() / 2)));
+    }
+
+    public AudioFormat getAudioFormat(){
+        return this.getAudioFormat();
     }
 
 }
