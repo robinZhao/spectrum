@@ -294,7 +294,7 @@ public class Spectrum {
     }
 
     public AudioFormat getAudioFormat(){
-        return this.getAudioFormat();
+        return this.format;
     }
 
 }

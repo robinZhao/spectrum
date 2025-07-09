@@ -20,3 +20,5 @@ public static void main(String[] args){
     spc.drawSpctrogram(0, spc.getAudioFormat().getSampleRate()/2, 1024, 800, -1);
 }
 ```
+
+![频谱图](test.png)

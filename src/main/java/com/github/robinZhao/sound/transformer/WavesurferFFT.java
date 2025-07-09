@@ -31,8 +31,8 @@ public class WavesurferFFT {
         switch (windowFunc) {
             case "bartlett":
                 for (int i = 0; i < bufferSize; i++) {
-                    this.windowValues[i] = (2 / (bufferSize - 1))
-                            * ((bufferSize - 1) / 2 - Math.abs(i - (bufferSize - 1) / 2));
+                    this.windowValues[i] = (2d / (bufferSize - 1))
+                            * ((bufferSize - 1) / 2d - Math.abs(i - (bufferSize - 1) / 2d));
                 }
                 break;
             case "bartlettHann":
@@ -51,7 +51,7 @@ public class WavesurferFFT {
                 break;
             case "cosine":
                 for (int i = 0; i < bufferSize; i++) {
-                    this.windowValues[i] = Math.cos((Math.PI * i) / (bufferSize - 1) - Math.PI / 2);
+                    this.windowValues[i] = Math.cos((Math.PI * i) / (bufferSize - 1) - Math.PI / 2d);
                 }
                 break;
             case "gauss":
@@ -59,7 +59,7 @@ public class WavesurferFFT {
                 for (int i = 0; i < bufferSize; i++) {
                     this.windowValues[i] = Math.pow(
                             Math.E,
-                            -0.5 * Math.pow((i - (bufferSize - 1) / 2) / ((alpha * (bufferSize - 1)) / 2), 2));
+                            -0.5 * Math.pow((i - (bufferSize - 1) / 2d) / ((alpha * (bufferSize - 1)) / 2d), 2));
                 }
                 break;
             case "hamming":
@@ -70,13 +70,13 @@ public class WavesurferFFT {
             case "hann":
             case "":
                 for (int i = 0; i < bufferSize; i++) {
-                    this.windowValues[i] = 0.5 * (1 - Math.cos((Math.PI * 2 * i) / (bufferSize - 1)));
+                    this.windowValues[i] = 0.5 * (1 - Math.cos((Math.PI * 2d * i) / (bufferSize - 1)));
                 }
                 break;
             case "lanczoz":
                 for (int i = 0; i < bufferSize; i++) {
-                    this.windowValues[i] = Math.sin(Math.PI * ((2 * i) / (bufferSize - 1) - 1))
-                            / (Math.PI * ((2 * i) / (bufferSize - 1) - 1));
+                    this.windowValues[i] = Math.sin(Math.PI * ((2d * i) / (bufferSize - 1) - 1))
+                            / (Math.PI * ((2d * i) / (bufferSize - 1) - 1));
                 }
                 break;
             case "rectangular":
@@ -86,7 +86,7 @@ public class WavesurferFFT {
                 break;
             case "triangular":
                 for (int i = 0; i < bufferSize; i++) {
-                    this.windowValues[i] = (2 / bufferSize) * (bufferSize / 2 - Math.abs(i - (bufferSize - 1) / 2));
+                    this.windowValues[i] = (2d / bufferSize) * (bufferSize / 2d - Math.abs(i - (bufferSize - 1) / 2d));
                 }
                 break;
             default:

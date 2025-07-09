@@ -87,8 +87,8 @@ public abstract class WindowFun {
 
     public static class LanczozWindow extends WindowFun {
         public double getValue(int length, int index) {
-            return Math.sin(Math.PI * ((2 * index) / (length - 1) - 1))
-                    / (Math.PI * ((2 * index) / (length - 1) - 1));
+            return Math.sin(Math.PI * ((2d * index) / (length - 1) - 1))
+                    / (Math.PI * ((2d * index) / (length - 1) - 1));
         }
     }
 
