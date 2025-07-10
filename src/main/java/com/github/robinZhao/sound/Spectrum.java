@@ -21,7 +21,6 @@ public class Spectrum {
     private AudioFormat format;
     private int bufferSize = 1024;
     byte[] audioByteBuffer;
-    private int offsetInBytes;
     private AudioDoubleConverter audioFloatConverter;
     private int channels;
     private int sampleSize;
@@ -37,7 +36,7 @@ public class Spectrum {
     public static void main(String[] args) {
         long startTime = System.currentTimeMillis();
         int bufferSize = 1024;
-        Spectrum spc = new Spectrum(new File("test.wav"), bufferSize,
+        Spectrum spc = new Spectrum(new File("20250710_164040.wav"), bufferSize,
                 ScaleFilter.Type.mel,
                 new WavesurferTransformer(bufferSize, "hann"));
         spc.run();
@@ -78,8 +77,7 @@ public class Spectrum {
     public void run() {
         while (true) {
             try {
-                int bytesRead = this.audioInputStream.read(this.audioByteBuffer, offsetInBytes,
-                        this.audioByteBuffer.length);
+                int bytesRead = this.audioInputStream.read(this.audioByteBuffer);
                 if (bytesRead == -1) {
                     break;
                 }
@@ -97,7 +95,7 @@ public class Spectrum {
 
     public void channelSplit() {
         this.channelsBytes = new byte[channels][byteBufferLength / channels];
-        for (int i = 0; i < byteBufferLength / channels; i++) {
+        for (int i = 0; i < byteBufferLength / channels/sampleSize; i++) {
             for (int j = 0; j < channels; j++) {
                 System.arraycopy(audioByteBuffer, (i * channels + j) * sampleSize, channelsBytes[j], i * sampleSize,
                         sampleSize);
