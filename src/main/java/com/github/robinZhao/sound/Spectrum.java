@@ -8,6 +8,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 
 import javax.imageio.ImageIO;
 import javax.sound.sampled.AudioFormat;
@@ -24,30 +26,66 @@ public class Spectrum {
     private AudioDoubleConverter audioFloatConverter;
     private int channels;
     private int sampleSize;
+    private long frameLength;
     private int byteBufferLength;
     private byte[][] channelsBytes;
     private int gainDB = 20;
     private int rangeDB = 80;
     private List<double[]>[] frequenciesData;
+    private int overlap = 0;
     private ColorMap colorMap = new ColorMap(ColorMap.Type.roseus);
     ScaleFilter scale;
     SpectrumTransformer spectrumTransformer;
 
     public static void main(String[] args) {
         long startTime = System.currentTimeMillis();
-        int bufferSize = 1024;
-        Spectrum spc = new Spectrum(new File("20250710_164040.wav"), bufferSize,
+        int bufferSize = 512;
+        String fileName = "XJ002_xj02-20231115140958.wav";
+        File file = new File(fileName);
+        Spectrum spc = new Spectrum(file, bufferSize,
                 ScaleFilter.Type.mel,
                 new WavesurferTransformer(bufferSize, "hann"));
+        long frameLength = (file.length()-44)/spc.format.getFrameSize();
+        int overlap = Math.max(0,(int)Math.round((double)bufferSize-(double)frameLength/300.0));
+        spc.setOverlap(overlap);
         spc.run();
         System.out.println(System.currentTimeMillis() - startTime);
-        spc.drawSpctrogram(0,spc.getAudioFormat().getSampleRate()/2,1024, 800, 40,20,-1);
+        spc.drawSpctrogram(0,spc.getAudioFormat().getSampleRate()/2,800, 150, 0,0,-1);
     }
 
+    /**
+     * 创建频谱对象
+     * 
+     * @param audioFile   输入音频文件 wav
+     * @param bufferSize  每个分段多少帧
+     * @param scaleType   刻度类型 ScaleFilter.Type
+     * @param transformer 归一化的double类型时域信号转换为频域数据的转换器
+     */
     public Spectrum(File audioFile, int bufferSize, ScaleFilter.Type scaleType, SpectrumTransformer transformer) {
+        this(new Supplier<AudioInputStream>() {
+            @Override
+            public AudioInputStream get() {
+                try {
+                    return AudioSystem.getAudioInputStream(audioFile);
+                } catch (Exception e) {
+                    throw new RuntimeException("读取音频文件失败"+audioFile,e);
+                } 
+            }
+        }.get(),bufferSize,scaleType,transformer);
+    }
+
+    /**
+     * 创建频谱对象
+     * 
+     * @param audioInputStream   输入音频流
+     * @param bufferSize  每个分段多少帧
+     * @param scaleType   刻度类型 ScaleFilter.Type
+     * @param transformer 归一化的double类型时域信号转换为频域数据的转换器
+     */
+    public Spectrum(AudioInputStream audioInputStream, int bufferSize, ScaleFilter.Type scaleType, SpectrumTransformer transformer) {
         this.bufferSize = bufferSize;
         try {
-            audioInputStream = AudioSystem.getAudioInputStream(audioFile);
+            this.audioInputStream=audioInputStream;
             this.format = audioInputStream.getFormat();
             this.sampleSize = format.getSampleSizeInBits() / 8;
             this.byteBufferLength = bufferSize * this.format.getFrameSize();
@@ -66,6 +104,10 @@ public class Spectrum {
 
     }
 
+    public Spectrum(AudioInputStream audioInputStream, int bufferSize, ScaleFilter.Type scaleType) {
+        this(audioInputStream, bufferSize, scaleType, new WavesurferTransformer(bufferSize, "hann"));
+    }
+
     public Spectrum(File audioFile, int bufferSize, ScaleFilter.Type scaleType) {
         this(audioFile, bufferSize, scaleType, new WavesurferTransformer(bufferSize, "hann"));
     }
@@ -75,11 +117,43 @@ public class Spectrum {
     }
 
     public void run() {
+        if(overlap>=bufferSize){
+            throw new RuntimeException("overlap过大,overlap必须小于bufferSize");
+        }
+        AtomicBoolean begin= new AtomicBoolean(true);
+        long totalBytes = 0;
+        int overBytes = overlap*this.format.getFrameSize();
+        int readBytes = this.byteBufferLength-overBytes;
+        int bytesRead=0;
         while (true) {
+            int idx = 0;
             try {
-                int bytesRead = this.audioInputStream.read(this.audioByteBuffer);
-                if (bytesRead == -1) {
+                if(begin.getAndSet(false)){
+                    //第一次读取整包
+                    bytesRead = this.audioInputStream.read(this.audioByteBuffer);
+                }else{
+                    //把后overBytes个字节往前移到开头
+                    System.arraycopy(this.audioByteBuffer, readBytes, this.audioByteBuffer, 0, overBytes);
+                    idx+=overBytes;
+                    //读取readBytes个字节，追加到结尾
+                    bytesRead = this.audioInputStream.read(this.audioByteBuffer,overBytes,readBytes);
+                }
+                if(bytesRead==-1){
                     break;
+                }
+                totalBytes+=bytesRead;
+                System.out.println(totalBytes);
+                idx+=bytesRead;
+                //如果没读满，则用已读数据填充，直到填满
+                while(idx<this.byteBufferLength){
+                    int fillSrcIndex = idx-(this.byteBufferLength-idx);
+                    int fillSize = this.byteBufferLength-idx;
+                    if(fillSrcIndex<0){
+                        fillSrcIndex=0;
+                        fillSize=idx;
+                    }
+                    System.arraycopy(this.audioByteBuffer, fillSrcIndex, this.audioByteBuffer, idx, fillSize);
+                    idx+=fillSize;
                 }
                 channelSplit();
                 for (int i = 0; i < channels; i++) {
@@ -91,6 +165,7 @@ public class Spectrum {
                 throw new RuntimeException(e);
             }
         }
+        this.frameLength=totalBytes/this.format.getFrameSize();
     }
 
     public void channelSplit() {
@@ -283,7 +358,7 @@ public class Spectrum {
 
             if(markLeftWidth>=0)drawFreqMark(spectrCc, frequencyMin,frequencyMax,innerHeight * c, innerHeight);
         }
-        if(markBottomHeight>=0)drawTimeMark(spectrCc,this.audioInputStream.getFrameLength()/this.format.getSampleRate(),picWidth,picHeight-markBottomHeight/2,markLeftWidth>=0?markLeftWidth:0);
+        if(markBottomHeight>=0)drawTimeMark(spectrCc,(frameLength>0?frameLength:audioInputStream.getFrameLength())/this.format.getSampleRate(),picWidth,picHeight-markBottomHeight/2,markLeftWidth>=0?markLeftWidth:0);
         try {
             ImageIO.write(image, "png", new File("test.png"));
         } catch (IOException e) {
@@ -317,6 +392,14 @@ public class Spectrum {
     public int hzToIdx(double hz, int length) {
         return (int) Math.round((double) length
                 * (this.scale.hzToScale(hz) / this.scale.hzToScale(this.format.getSampleRate() / 2)));
+    }
+
+    public void setOverlap(int overlap){
+        this.overlap=overlap;
+    }
+
+    public AudioInputStream getAudioInputStream(){
+        return this.audioInputStream;
     }
 
     public AudioFormat getAudioFormat(){
