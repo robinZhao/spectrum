@@ -9,7 +9,9 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Supplier;
 
 import javax.imageio.ImageIO;
@@ -29,8 +31,8 @@ public class Spectrum {
     private int sampleSize;
     private long frameLength;
     private double duration;
-    private int gainDB = 0;
-    private int rangeDB = 140;
+    private double gainDB = 0;
+    private double rangeDB = 140;
     private Color frontColor = new Color(215, 0, 194);
     private Color backColor = new Color(0, 0, 0);
     private Color fontColor = new Color(255, 255, 255);
@@ -53,10 +55,10 @@ public class Spectrum {
         long frameLength = (file.length() - 44) / spc.format.getFrameSize();
         int overlap = Math.max(0, (int) Math.round((double) bufferSize - (double) frameLength / 300.0));
         spc.setOverlap(overlap);
-        spc.mergeChannel=false;
+        spc.mergeChannel = false;
         spc.run();
-        spc.drawSpctrogram("test.png", 0, 8000, 668, 200, 0, 0, -1);
-        spc.drawSpctrogramLineVideo("test", 0, spc.getAudioFormat().getSampleRate() / 2, 800, 400, 0, 0, -1);
+        spc.drawSpctrogram("test.png", 0, spc.getAudioFormat().getSampleRate() /2, 668, 200, 0, 35, 0, -1);
+        spc.drawSpctrogramLineVideo("test", 0, spc.getAudioFormat().getSampleRate() /2, 800, 400, 0, 0, -1);
         spc.drawAmplitudeLine("amp", 800, 400, 0, 0, -1);
         spc.drawDbLine("db", 800, 400, 0, 0, -1);
         spc.drawAmplitudeLineVideo("amp", 800, 400, 0, 0, -1);
@@ -276,10 +278,9 @@ public class Spectrum {
         double stepHeight = 256d / 5;
         double scaleMin = this.scale.hzToScale(frequencyMin);
         double scaleMax = this.scale.hzToScale(frequencyMax);
-
+        g.setColor(fontColor);
         for (double markY = 0; markY < height; markY += stepHeight) {
             double hz = this.scale.scaleToHz(scaleMin + (markY / height) * (scaleMax - scaleMin));
-            g.setColor(colorMap.getColor(255));
             g.setFont(new Font("Arial", Font.BOLD, 12));
             g.drawString(this.labelText(hz), x, y + height - (int) markY);
         }
@@ -290,9 +291,9 @@ public class Spectrum {
         double scaleMin = this.scale.hzToScale(frequencyMin);
         double scaleMax = this.scale.hzToScale(frequencyMax);
         // double scaleFrom = this.scale.hzToScale(8000);
+        g.setColor(fontColor);
         for (int i = 0; i <= width; i += 50) {
             double hz = this.scale.scaleToHz(scaleMin + (scaleMax - scaleMin) * (double) i / width);
-            g.setColor(colorMap.getColor(255));
             g.setFont(new Font("Arial", Font.BOLD, 12));
             g.drawString(this.labelText(hz), x + i, y);
         }
@@ -305,7 +306,6 @@ public class Spectrum {
         for (int i = 0; i <= width; i += 50) {
             // double second = i/stepCount*duration;
             double timeScale = startTime + duration * i / width;
-            g.setColor(colorMap.getColor(255));
             g.setFont(new Font("Arial", Font.BOLD, 12));
             if (timeScale > 0) {
                 g.drawString(String.format("%.2fs", timeScale), x + i, y);
@@ -325,6 +325,51 @@ public class Spectrum {
         }
     }
 
+    private void drawDomainColorMark(Graphics g, int x, int y, int outHeight, boolean reverse) {
+        int height = outHeight - 10;
+        int width = 35;
+        Map<Integer, Double> labels = new HashMap<>();
+        for (int i = 0; i < 256; i++) {
+            if (!reverse) {
+                g.setColor(colorMap.getColor(255));
+                g.fillRect(x, 0, width, 5);
+                g.setColor(colorMap.getColor(0));
+                g.fillRect(x, height + 5, width, 5);
+                g.setColor(colorMap.getColor(i));
+                int y1 = (int) (height * (1d - (i + 1) / 256d));
+                int y2 = (int) (height * (1d - i / 256d));
+                g.fillRect(x, 5 + y + y1, width, 5 + y + y2 - y1);
+                if (i % 32 == 0) {
+                    labels.put((int) ((y2 + y1) / 2d), -rangeDB * (1.0 - i / 256d));
+                }
+                labels.put((int) 0, 0.0);
+            } else {
+                g.setColor(colorMap.getColor(255));
+                g.fillRect(x, height + 5, width, 5);
+                g.setColor(colorMap.getColor(0));
+                g.fillRect(x, 0, width, 5);
+                g.setColor(colorMap.getColor(i));
+                int y1 = (int) (height * i / 256d);
+                int y2 = (int) (height * (i + 1d) / 256d);
+                g.fillRect(x, 5 + y + y1, width, 5 + y + y2 - y1);
+                if (i % 32 == 0) {
+                    labels.put((int) ((y2 + y1) / 2d), -rangeDB * (1.0 - i / 256d));
+                }
+                labels.put((int) height, 0.0);
+            }
+        }
+
+        g.setColor(fontColor);
+        for (Map.Entry<Integer, Double> entry : labels.entrySet()) {
+            if (entry.getValue() > -rangeDB / 2) {
+                g.setColor(colorMap.getColor(0));
+            } else {
+                g.setColor(colorMap.getColor(255));
+            }
+            g.drawString(String.format("%.2f", entry.getValue()), x, y + entry.getKey() + 5 + 5);
+        }
+    }
+
     /**
      * @param frequencyMin 图像中最小频率
      * @param frequencyMin 图像中最大频率
@@ -334,7 +379,7 @@ public class Spectrum {
      */
     public void drawSpctrogram(String output, double frequencyMin, double frequencyMax, int width, int height,
             int channelIdx) {
-        this.drawSpctrogram(output, frequencyMin, frequencyMax, width, height, 0, -1, channelIdx);
+        this.drawSpctrogram(output, frequencyMin, frequencyMax, width, height, 0, 20, -1, channelIdx);
     }
 
     /**
@@ -343,11 +388,12 @@ public class Spectrum {
      * @param width            图片宽度
      * @param height           图片高度
      * @param markLeftWidth    左侧刻度占用的宽度
+     * @param markRightWidth   左侧图例的宽度
      * @param markBottomHeight 底部刻度占用的高度
      * @param channelIdx       绘制的声道,小于0代表全部声道，大于等于0代表指定声道
      */
     public void drawSpctrogram(String output, double frequencyMin, double frequencyMax, int picWidth, int picHeight,
-            int markLeftWidth,
+            int markLeftWidth, int markRightWidth,
             int markBottomHeight, int channelIdx) {
         if (null == this.frequenciesData || this.frequenciesData.length == 0) {
             throw new RuntimeException("频谱图绘制错误，无数据");
@@ -358,6 +404,7 @@ public class Spectrum {
         // Maximum frequency represented in `frequenciesData`
         int freqFrom = (int) this.format.getSampleRate() / 2;
         int width = markLeftWidth > 0 ? picWidth - markLeftWidth : picWidth;
+        width = markRightWidth > 0 ? width - markRightWidth : width;
         int height = markBottomHeight > 0 ? picHeight - markBottomHeight : picHeight;
         int innerHeight = height / frequenciesData.length;
         if (channelIdx >= 0) {
@@ -398,7 +445,7 @@ public class Spectrum {
 
             // Only relevant if `freqMax > freqFrom`
             double rMax1 = Math.min(1, rMax);
-            int dx0 = picWidth - width;
+            int dx0 = markLeftWidth > 0 ? markLeftWidth : 0;
             int dy0 = (int) (innerHeight * (c + 1 - rMax1 / rMax));
             int dx1 = dx0 + width;
             int dy1 = (c + 1) * (int) (innerHeight);
@@ -408,14 +455,16 @@ public class Spectrum {
                     (int) Math.round(bitmapHeight * (1 - rMin)), null);
 
             if (markLeftWidth >= 0) {
-                spectrCc.setColor(fontColor);
                 drawFreqMark(spectrCc, 0, innerHeight * c, innerHeight, frequencyMin, frequencyMax);
             }
         }
+
         if (markBottomHeight >= 0)
-            drawTimeMark(spectrCc, markLeftWidth, picHeight - markBottomHeight / 2, width,
+            drawTimeMark(spectrCc, markLeftWidth < 0 ? 0 : markLeftWidth, picHeight - markBottomHeight / 2, width,
                     (frameLength > 0 ? frameLength : audioInputStream.getFrameLength()) / this.format.getSampleRate(),
                     0);
+        if (markRightWidth >= 0)
+            drawDomainColorMark(spectrCc, picWidth - 35, 0, picHeight, false);
         try {
             ImageIO.write(image, "png", new File(output));
         } catch (IOException e) {
@@ -452,7 +501,8 @@ public class Spectrum {
         }
 
         // double rate = timeline.size()/timeline.get(timeline.size()-1);
-        // VideoCreator Video = new VideoCreator(output+".Video", picWidth, picHeight, rate);
+        // VideoCreator Video = new VideoCreator(output+".Video", picWidth, picHeight,
+        // rate);
         VideoCreator video = new VideoCreator(output + ".mp4", picWidth, picHeight, 60.0, file);
         for (int i = 0; i < frequenciesData[0].size(); i++) {
             // Minimum and maximum frequency we want to draw
@@ -500,11 +550,9 @@ public class Spectrum {
                 Image scaledImage = subImage.getScaledInstance(dx1 - dx0, innerHeight, Image.SCALE_SMOOTH);
                 spectrCc.drawImage(scaledImage, dx0, dy0, null);
                 if (markLeftWidth >= 0) {
-                    drawDomainMark(spectrCc, 0, c*innerHeight, innerHeight, rangeDB, false);
+                    drawDomainMark(spectrCc, 0, c * innerHeight, innerHeight, rangeDB, false);
                 }
             }
-
-
 
             if (markBottomHeight >= 0) {
                 spectrCc.setColor(fontColor);
@@ -518,7 +566,7 @@ public class Spectrum {
             // Video.addImage(image,(long)(endTime*1000));
             video.addImage(image, (long) (startTime * 1000000));
             if (i == this.frequenciesData[0].size() - 1) {
-                video.addImage(image, (long)duration*1000000);
+                video.addImage(image, (long) duration * 1000000);
             }
         }
         // Video.finsh();
@@ -566,7 +614,8 @@ public class Spectrum {
             }
             g1.fillPolygon(x, y, x.length);
             g1.fillPolygon(x, y1, x.length);
-            Image scaledImage = cImage.getScaledInstance(picWidth-markLeftWidth, channelHeight, Image.SCALE_REPLICATE);
+            Image scaledImage = cImage.getScaledInstance(picWidth - markLeftWidth, channelHeight,
+                    Image.SCALE_SMOOTH);
             g.drawImage(scaledImage, markLeftWidth, c * channelHeight, null);
         }
         for (int c = 0; c < drawChannels; c++) {
@@ -627,7 +676,8 @@ public class Spectrum {
                 y1[i + 1] = -vy;
             }
             g1.fillPolygon(x, y1, x.length);
-            Image scaledImage = cImage.getScaledInstance(picWidth-markLeftWidth, channelHeight, Image.SCALE_REPLICATE);
+            Image scaledImage = cImage.getScaledInstance(picWidth - markLeftWidth, channelHeight,
+                    Image.SCALE_SMOOTH);
             g.drawImage(scaledImage, markLeftWidth, c * channelHeight, null);
         }
         for (int c = 0; c < drawChannels; c++) {
@@ -644,7 +694,8 @@ public class Spectrum {
         }
     }
 
-    public void drawAmplitudeLineVideo(String filePath, int picWidth, int picHeight, int markLeftWidth, int markBottomHeight,
+    public void drawAmplitudeLineVideo(String filePath, int picWidth, int picHeight, int markLeftWidth,
+            int markBottomHeight,
             int channelIdx) {
         if (channelIdx > this.amplitudeData.length - 1) {
             throw new RuntimeException("要绘制的通道不存在");
@@ -684,7 +735,8 @@ public class Spectrum {
                 }
                 g1.fillPolygon(x, y, x.length);
                 g1.fillPolygon(x, y1, x.length);
-                Image scaledImage = cImage.getScaledInstance(picWidth-markLeftWidth, channelHeight, Image.SCALE_REPLICATE);
+                Image scaledImage = cImage.getScaledInstance(picWidth - markLeftWidth, channelHeight,
+                        Image.SCALE_SMOOTH);
                 g.drawImage(scaledImage, markLeftWidth, c * channelHeight, null);
             }
 
@@ -700,7 +752,7 @@ public class Spectrum {
             g.drawString(String.format("%.2fs", startTime), picWidth - 40, 10);
             // Video.addImage(image,(long)(endTime*1000));
             video.addImage(image, (long) (startTime * 1000000));
-            if (j == this.amplitudeData[0].size() - 1){
+            if (j == this.amplitudeData[0].size() - 1) {
                 video.addImage(image, (long) (endTime * 1000000));
             }
         }
@@ -747,7 +799,8 @@ public class Spectrum {
                     y1[i + 1] = -vy;
                 }
                 g1.fillPolygon(x, y1, x.length);
-                Image scaledImage = cImage.getScaledInstance(picWidth-markLeftWidth, channelHeight, Image.SCALE_REPLICATE);
+                Image scaledImage = cImage.getScaledInstance(picWidth - markLeftWidth, channelHeight,
+                        Image.SCALE_SMOOTH);
                 g.drawImage(scaledImage, markLeftWidth, c * channelHeight, null);
             }
 
@@ -762,7 +815,7 @@ public class Spectrum {
             g.drawString(String.format("%.2fs", startTime), picWidth - 40, 10);
             // Video.addImage(image,(long)(endTime*1000));
             video.addImage(image, (long) (endTime * 1000000));
-            if (j == this.amplitudeData[0].size() - 1){
+            if (j == this.amplitudeData[0].size() - 1) {
                 video.addImage(image, (long) (endTime * 1000000));
             }
         }
