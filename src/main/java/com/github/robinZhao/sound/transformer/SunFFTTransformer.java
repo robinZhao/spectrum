@@ -15,9 +15,12 @@ public class SunFFTTransformer implements SpectrumTransformer {
 
     @Override
     public double[] transform(double[] audioDoubleBuffer) {
+        double[] temp = new double[audioDoubleBuffer.length];
+        System.arraycopy(audioDoubleBuffer, 0, temp, 0, audioDoubleBuffer.length);
+        //windowFun.apply(temp);
         double[] transformData = new double[bufferSize * 2];
         for (int i = 0; i < bufferSize; i++) {
-            transformData[2 * i] = audioDoubleBuffer[i];
+            transformData[2 * i] = temp[i];
             transformData[2 * i + 1] = 0;
         }
         windowFun.apply(transformData);
