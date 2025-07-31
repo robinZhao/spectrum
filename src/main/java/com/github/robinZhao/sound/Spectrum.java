@@ -1,8 +1,10 @@
 package com.github.robinZhao.sound;
 
+import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.image.BufferedImage;
 import java.io.File;
@@ -10,9 +12,11 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
+import java.util.stream.DoubleStream;
 
 import javax.imageio.ImageIO;
 import javax.sound.sampled.AudioFormat;
@@ -39,11 +43,20 @@ public class Spectrum {
     private List<double[]>[] frequenciesData;
     private List<double[]>[] amplitudeData;;
     private List<Double> timeline = new ArrayList<>();
+    private List<NormalRange> normalRanges = new ArrayList<>();
     private int overlap = 0;
     private boolean mergeChannel = true;
     private ColorMap colorMap = new ColorMap(ColorMap.Type.roseus);
     ScaleFilter scale;
     SpectrumTransformer spectrumTransformer;
+
+    public void addNormalRange(double minFreq, double maxFreq, double minDB, double maxDb) {
+        if (this.mergeChannel) {
+            this.normalRanges.add(new NormalRange(minFreq, maxFreq, minDB, maxDb,1));
+        } else {
+            this.normalRanges.add(new NormalRange(minFreq, maxFreq, minDB, maxDb,this.channels));
+        }
+    }
 
     public static void main(String[] args) {
         int bufferSize = 512;
@@ -56,13 +69,15 @@ public class Spectrum {
         int overlap = Math.max(0, (int) Math.round((double) bufferSize - (double) frameLength / 300.0));
         spc.setOverlap(overlap);
         spc.mergeChannel = false;
+        spc.addNormalRange(135, 296, -100, -35);
         spc.run();
-        spc.drawSpctrogram("test.png", 0, spc.getAudioFormat().getSampleRate() /2, 668, 200, 0, 35, 0, -1);
-        spc.drawSpctrogramLineVideo("test", 0, spc.getAudioFormat().getSampleRate() /2, 800, 400, 0, 0, -1);
-        spc.drawAmplitudeLine("amp", 800, 400, 0, 0, -1);
-        spc.drawDbLine("db", 800, 400, 0, 0, -1);
-        spc.drawAmplitudeLineVideo("amp", 800, 400, 0, 0, -1);
-        spc.drawDbLineVideo("db", 800, 400, 0, 0, -1);
+        spc.validate();
+        spc.drawSpctrogram("test.png", 0, spc.getAudioFormat().getSampleRate() / 2, 668, 200, 0, 35, 0, -1);
+        spc.drawSpctrogramLineVideo("test", 0, spc.getAudioFormat().getSampleRate() / 2, 800, 400, 0, 0, -1);
+        // spc.drawAmplitudeLine("amp", 800, 400, 0, 0, -1);
+        // spc.drawDbLine("db", 800, 400, 0, 0, -1);
+        // spc.drawAmplitudeLineVideo("amp", 800, 400, 0, 0, -1);
+        // spc.drawDbLineVideo("db", 800, 400, 0, 0, -1);
     }
 
     /**
@@ -450,6 +465,35 @@ public class Spectrum {
             int dx1 = dx0 + width;
             int dy1 = (c + 1) * (int) (innerHeight);
 
+            cg.setColor(Color.white);
+            BasicStroke stokeLine = new BasicStroke(2.0f);
+            ((Graphics2D)cg).setStroke(stokeLine);
+            for(NormalRange range:this.normalRanges){
+                int y = hzToIdx(range.getMaxFreq(),bufferSize);
+                int y1 = hzToIdx(range.getMinFreq(),bufferSize);
+                NormalRange.AlarmInfo alarmInfo = range.getAlarmInfo(c);
+                if(!alarmInfo.alarmTimeIdxs.isEmpty()){
+                    int preTimeIdx=-1;
+                    int currentTimeIdx=0;
+                    Iterator<Integer> iter = alarmInfo.alarmTimeIdxs.iterator();
+                     while(iter.hasNext()){
+                        Integer i = iter.next();
+                        if(i-currentTimeIdx > 5){
+                            if(preTimeIdx>=0){
+                                int x = (int)((double)preTimeIdx/frequenciesData[c].size()*(double)width);
+                                int x1 = (int)((double)currentTimeIdx/frequenciesData[c].size()*(double)width);
+                                cg.drawRect(x, bitmapHeight-y-1,x1-x, y-y1);
+                            }
+                            preTimeIdx=i;
+                        }
+                        currentTimeIdx=i;
+                     }
+                     int x = (int)((double)preTimeIdx/frequenciesData[c].size()*(double)width);
+                     int x1 = (int)((double)currentTimeIdx/frequenciesData[c].size()*(double)width);
+                     cg.drawRect(x, bitmapHeight-y-1,x1-x, y-y1);
+                }
+            }
+
             spectrCc.drawImage(cImage, dx0, dy0, dx1, dy1,
                     0, (int) Math.round(bitmapHeight * (1 - rMax1)), width,
                     (int) Math.round(bitmapHeight * (1 - rMin)), null);
@@ -545,6 +589,32 @@ public class Spectrum {
                 int dy0 = c * innerHeight;
                 int dx1 = (int) (dx0 + width * (rMax1 / rMax));
                 int dy1 = (c + 1) * (int) (innerHeight);
+
+                cg.setColor(Color.white);
+                BasicStroke stokeLine = new BasicStroke(2.0f);
+                ((Graphics2D)cg).setStroke(stokeLine);
+                for(NormalRange range:this.normalRanges){
+                    int endX = hzToIdx(range.getMaxFreq(),bitmapWidth);
+                    int startX = hzToIdx(range.getMinFreq(),bitmapWidth);
+                    int startYmax =  (int) (innerHeight * (1 - (rangeDB + range.getMaxDb()) / (double) rangeDB));
+                    int startYmin =  (int) (innerHeight * (1 - (rangeDB + range.getMinDb()) / (double) rangeDB));
+                    NormalRange.AlarmInfo alarmInfo = range.getAlarmInfo(c);
+                    if(!alarmInfo.alarmTimeIdxs.isEmpty()){
+                        if(alarmInfo.alarmTimeIdxs.contains(i)){
+                            double [] amps = Arrays.copyOfRange(frequenciesData[c].get(i),startX,endX);
+                            double max = DoubleStream.of(amps).max().getAsDouble();
+                            double min = DoubleStream.of(amps).min().getAsDouble();
+                            if(min<range.getMinDb()){
+                                int endY = (int) (innerHeight * (1 - (rangeDB + min) / (double) rangeDB));
+                                cg.drawRect(startX, startYmin,endX-startX, endY-startYmin);
+                            }
+                            if(max>range.getMaxDb()){
+                                int endY = (int) (innerHeight * (1 - (rangeDB + max) / (double) rangeDB));
+                                cg.drawRect(startX, endY,endX-startX, startYmax-endY);
+                            }
+                         }
+                    }
+                }
                 Image subImage = cImage.getSubimage((int) Math.round(bitmapWidth * rMin), 0,
                         (int) Math.round(bitmapWidth * (rMax1 - rMin)), innerHeight);
                 Image scaledImage = subImage.getScaledInstance(dx1 - dx0, innerHeight, Image.SCALE_SMOOTH);
@@ -844,7 +914,7 @@ public class Spectrum {
      * @return
      */
     public int hzToIdx(double hz, int length) {
-        return (int) Math.round((double) length
+        return (int) Math.round(length
                 * (this.scale.hzToScale(hz) / this.scale.hzToScale(this.format.getSampleRate() / 2)));
     }
 
@@ -859,4 +929,33 @@ public class Spectrum {
     public AudioFormat getAudioFormat() {
         return this.format;
     }
+
+    public void validate() {
+        Map<Double, Integer> idxCache = new HashMap<>();
+        this.normalRanges.forEach(range -> {
+            idxCache.computeIfAbsent(Double.valueOf(range.getMinFreq()),
+                    (k) -> hzToIdx(k, bufferSize));
+            idxCache.computeIfAbsent(Double.valueOf(range.getMaxFreq()),
+                    (k) -> hzToIdx(k, bufferSize));
+        });
+        for (int c = 0; c < this.frequenciesData.length; c++) {
+            for (int i = 0; i < this.frequenciesData[c].size(); i++) {
+                int len = frequenciesData[c].get(i).length;
+                for (int j = 0; j < len; j++) {
+                    for (NormalRange range : this.normalRanges) {
+                        int idxMin = idxCache.get(range.getMinFreq());
+                        int idxMax = idxCache.get(range.getMaxFreq());
+                        if (idxMin <= j && idxMax > j) {
+                            double db = frequenciesData[c].get(i)[j];
+                            if (db < range.getMinDb() || db > range.getMaxDb()) {
+                                range.getAlarmInfo(c).addAlarmIdx(i);
+                                range.getAlarmInfo(c).addAlarmTime(this.timeline.get(i));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
 }
