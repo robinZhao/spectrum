@@ -10,14 +10,16 @@ public static void main(String[] args){
             ScaleFilter.Type.mel,
             //应用汉宁窗，并使用SunFFTTransformer做傅立叶变换，
             new SunFFTTransformer(bufferSize, "hann"));
+    spc.addNormalRange(135, 296, -100, -35);
     spc.run();
+    spc.validate();
     //获取频谱数据，下标为坐标系后的频率坐标，可以转换为频率
     //hz = spc.indexToHz(hz,length);
     //index = spc.hzToIndex(idx,length);
-    spc.getFrequenceData();
+    //spc.getFrequenceData();
     //绘制频谱图
     //采样率除以2为最高频率
-    spc.drawSpctrogram(0, spc.getAudioFormat().getSampleRate()/2, 1024, 800, -1);
+    spc.drawSpctrogram("test.png",0, spc.getAudioFormat().getSampleRate()/2, 1024, 800, -1);
 }
 ```
 
